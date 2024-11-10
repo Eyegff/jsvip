@@ -1,26 +1,42 @@
 // นำเข้าโมดูลที่จำเป็น
-const TelegramBot = require('node-telegram-bot-api');
+const line = require('@line/bot-sdk');
+const express = require('express');
 const request = require('request').defaults({ jar: true });
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 
-// ใส่โทเคนบอท Telegram ของคุณที่นี่
-const token = ''; // แทนที่ด้วยโทเคนของคุณ
+// ตั้งค่าการเชื่อมต่อกับ Line API
+const config = {
+  channelAccessToken: 'UKcDMbQt8jAwg7zji13tVf50BPdwOsQYhtyK1D+kACdxYJt1XKY0kvhYdiOK8GE4fgHsrakIGT9Q4UCphSpIhN JwMBeDKaWMzU06YUwhHUqiD7qE5H3GSVvKvpFygwA7DXP8MroQPNW+onG+UYXQ1AdB04t89/1O/w1cDnyilFU=', // แทนที่ด้วย Channel Access Token ของคุณ
+  channelSecret: '6884027b48dc05ad5deadf87245928da' // แทนที่ด้วย Channel Secret ของคุณ
+};
 
-// สร้างบอทที่ใช้ 'polling' ในการรับข้อความใหม่
-const bot = new TelegramBot(token, { polling: true });
+// สร้าง Line client และ Express app
+const client = new line.Client(config);
+const app = express();
+
+// ใช้ middleware สำหรับตรวจสอบลายเซ็นของ Line
+app.post('/webhook', line.middleware(config), (req, res) => {
+  Promise
+    .all(req.body.events.map(handleEvent))
+    .then((result) => res.json(result))
+    .catch((err) => {
+      console.error(err);
+      res.status(500).end();
+    });
+});
+
+// เริ่มเซิร์ฟเวอร์ที่พอร์ตที่กำหนด
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Line bot is running on port ${PORT}`);
+});
 
 // เก็บสถานะของผู้ใช้ในการสนทนา
 const userSessions = {};
 
 // เบอร์มือถือที่ใช้ในการรับเงิน
 const mobileNumber = '0825658423';
-
-// เก็บชื่อผู้ใช้ของบอท
-let botUsername = '';
-bot.getMe().then((botInfo) => {
-  botUsername = botInfo.username;
-});
 
 // ฟังก์ชันสำหรับแรนดอม UUID
 function generateUUID() {
@@ -38,13 +54,13 @@ function generateExpiryTime(days) {
 function login(callback) {
   const loginOptions = {
     method: 'POST',
-    url: '/GaKtR4zXrqhyIpG/login',
+    url: 'http://www.opensignal.com.esnfvpnfreevip_bot.itow.online:2053/GaKtR4zXrqhyIpG/login',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     form: {
-      'username': '',
-      'password': ''
+      'username': '01AlTQySvR',
+      'password': 'QG77bUywmS'
     }
   };
 
@@ -76,7 +92,7 @@ function addNewClient(session, successCallback, errorCallback) {
 
   const options = {
     method: 'POST',
-    url: '/GaKtR4zXrqhyIpG/panel/api/inbounds/addClient',
+    url: 'http://www.opensignal.com.esnfvpnfreevip_bot.itow.online:2053/GaKtR4zXrqhyIpG/panel/api/inbounds/addClient',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json'
@@ -125,7 +141,7 @@ function addNewClient(session, successCallback, errorCallback) {
 }
 
 // ฟังก์ชันสำหรับจัดการลิงก์ซองอั่งเปา
-function processTrueMoneyGiftCode(chatId, code) {
+function processTrueMoneyGiftCode(replyToken, code) {
   const options = {
     method: 'POST',
     url: `https://gift.truemoney.com/campaign/vouchers/${code}/redeem`,
@@ -146,7 +162,7 @@ function processTrueMoneyGiftCode(chatId, code) {
   request(options, function(error, response) {
     if (error) {
       console.error('เกิดข้อผิดพลาดในการส่งคำขอ:', error);
-      bot.sendMessage(chatId, '🚫 เกิดข้อผิดพลาดในการรับเงิน โปรดลองใหม่อีกครั้ง');
+      client.replyMessage(replyToken, { type: 'text', text: '🚫 เกิดข้อผิดพลาดในการรับเงิน โปรดลองใหม่อีกครั้ง' });
       return;
     }
 
@@ -156,20 +172,20 @@ function processTrueMoneyGiftCode(chatId, code) {
         const body = JSON.parse(response.body);
         if (body && body.data && body.data.my_ticket && body.data.my_ticket.amount_baht) {
           const amount = parseFloat(body.data.my_ticket.amount_baht);
-          bot.sendMessage(chatId, `✅ รับเงินจำนวน ${amount} บาท เรียบร้อยแล้ว! ขอบคุณที่โดเนทครับ 🙏`);
+          client.replyMessage(replyToken, { type: 'text', text: `✅ รับเงินจำนวน ${amount} บาท เรียบร้อยแล้ว! ขอบคุณที่โดเนทครับ 🙏` });
           // อัปเดตเครดิตของผู้ใช้
-          updateUserCredits(chatId, amount);
+          updateUserCredits(replyToken, amount);
         } else {
-          bot.sendMessage(chatId, '🚫 เกิดข้อผิดพลาดในการรับข้อมูลจำนวนเงิน');
+          client.replyMessage(replyToken, { type: 'text', text: '🚫 เกิดข้อผิดพลาดในการรับข้อมูลจำนวนเงิน' });
         }
       } catch (e) {
         console.error('Error parsing response:', e);
-        bot.sendMessage(chatId, '🚫 เกิดข้อผิดพลาดในการประมวลผลข้อมูล');
+        client.replyMessage(replyToken, { type: 'text', text: '🚫 เกิดข้อผิดพลาดในการประมวลผลข้อมูล' });
       }
 
     } else {
       console.log('Response:', response.body);
-      bot.sendMessage(chatId, '🚫 เกิดข้อผิดพลาดในการรับเงิน โปรดตรวจสอบลิงก์และลองใหม่อีกครั้ง');
+      client.replyMessage(replyToken, { type: 'text', text: '🚫 เกิดข้อผิดพลาดในการรับเงิน โปรดตรวจสอบลิงก์และลองใหม่อีกครั้ง' });
     }
   });
 }
@@ -209,8 +225,7 @@ function saveUserData(userId, data) {
   });
 }
 
-function updateUserCredits(chatId, amount) {
-  const userId = chatId.toString();
+function updateUserCredits(userId, amount) {
   let userData = getUserData(userId);
   let currentCredits = userData.credits || 0;
 
@@ -220,236 +235,207 @@ function updateUserCredits(chatId, amount) {
   userData.credits = newCredits;
   saveUserData(userId, userData);
 
-  bot.sendMessage(chatId, `💰 ยอดเครดิตปัจจุบันของคุณคือ ${newCredits} เครดิต`);
+  client.pushMessage(userId, { type: 'text', text: `💰 ยอดเครดิตปัจจุบันของคุณคือ ${newCredits} เครดิต` });
 }
 
 // เพิ่มรายการของแอดมิน
-const adminIds = [123456789]; // แทนที่ด้วย Telegram ID ของแอดมิน
+const adminIds = ['ADMIN_LINE_USER_ID']; // แทนที่ด้วย Line User ID ของแอดมิน
 
-// รับคำสั่ง /start จากผู้ใช้
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const message = '🤖 ยินดีต้อนรับสู่บอทสุดล้ำ! คุณสามารถใช้คำสั่งต่อไปนี้:\n\n' +
-                  '💠 /addclient - เพิ่มลูกค้าใหม่\n' +
-                  '💰 /topup - เติมเงินเพื่อซื้อเครดิต\n' +
-                  '💳 /mycredits - ตรวจสอบเครดิตของคุณ\n' +
-                  '📝 /mycodes - ดูโค้ดที่คุณสร้าง\n\n' +
-                  '📌 โปรดใช้คำสั่ง /topup เพื่อเติมเครดิตก่อนใช้งาน';
-  bot.sendMessage(chatId, message);
-});
-
-// รับคำสั่ง /topup จากผู้ใช้
-bot.onText(/\/topup/, (msg) => {
-  const chatId = msg.chat.id;
-  if (msg.chat.type === 'private') {
-    const message = '💳 กรุณาส่งลิงก์ซองอั่งเปาวอเลทเพื่อเติมเครดิตของคุณ!\n\n📥 ตัวอย่าง: https://gift.truemoney.com/campaign/?v=xxxxx';
-    bot.sendMessage(chatId, message);
-  } else {
-    bot.sendMessage(chatId, '⚠️ กรุณาใช้คำสั่งนี้ในแชทส่วนตัวกับบอทเท่านั้น');
+// ฟังก์ชันหลักในการจัดการอีเวนต์
+async function handleEvent(event) {
+  if (event.type !== 'message' || event.message.type !== 'text') {
+    // ไม่รองรับประเภทข้อความอื่นๆ
+    return Promise.resolve(null);
   }
-});
 
-// รับคำสั่ง /mycredits
-bot.onText(/\/mycredits/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id.toString();
-  let userData = getUserData(userId);
-  let credits = userData.credits || 0;
-  bot.sendMessage(chatId, `💰 ยอดเครดิตปัจจุบันของคุณคือ ${credits} เครดิต`);
-});
-
-// รับคำสั่ง /mycodes
-bot.onText(/\/mycodes/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id.toString();
-  let userData = getUserData(userId);
-  if (userData.codes && userData.codes.length > 0) {
-    let response = '📜 คุณได้สร้างโค้ดดังต่อไปนี้:\n';
-    userData.codes.forEach((codeEntry, index) => {
-      response += `🔹 ${index + 1}. ${codeEntry.codeName} - สร้างเมื่อ ${codeEntry.creationDate}\n`;
-    });
-    bot.sendMessage(chatId, response);
-  } else {
-    bot.sendMessage(chatId, '❌ คุณยังไม่ได้สร้างโค้ดใดๆ');
-  }
-});
-
-// รับคำสั่ง /givecredits สำหรับแอดมิน
-bot.onText(/\/givecredits/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  if (adminIds.includes(userId)) {
-    const options = {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: 'เพิ่มให้ผู้ใช้', callback_data: 'givecredits_to_user' }],
-          [{ text: 'เพิ่มให้ตัวเอง', callback_data: 'givecredits_to_self' }]
+  const userId = event.source.userId;
+  const message = event.message.text;
+  
+  // รับคำสั่งต่างๆ
+  if (message.startsWith('/start')) {
+    const replyText = '🤖 ยินดีต้อนรับสู่บอทสุดล้ำ! คุณสามารถใช้คำสั่งต่อไปนี้:\n\n' +
+                      '💠 /addclient - เพิ่มลูกค้าใหม่\n' +
+                      '💰 /topup - เติมเงินเพื่อซื้อเครดิต\n' +
+                      '💳 /mycredits - ตรวจสอบเครดิตของคุณ\n' +
+                      '📝 /mycodes - ดูโค้ดที่คุณสร้าง\n\n' +
+                      '📌 โปรดใช้คำสั่ง /topup เพื่อเติมเครดิตก่อนใช้งาน';
+    return client.replyMessage(event.replyToken, { type: 'text', text: replyText });
+  
+  } else if (message.startsWith('/topup')) {
+    const replyText = '💳 กรุณาส่งลิงก์ซองอั่งเปาวอเลทเพื่อเติมเครดิตของคุณ!\n\n📥 ตัวอย่าง: https://gift.truemoney.com/campaign/?v=xxxxx';
+    return client.replyMessage(event.replyToken, { type: 'text', text: replyText });
+  
+  } else if (message.startsWith('/mycredits')) {
+    let userData = getUserData(userId);
+    let credits = userData.credits || 0;
+    return client.replyMessage(event.replyToken, { type: 'text', text: `💰 ยอดเครดิตปัจจุบันของคุณคือ ${credits} เครดิต` });
+  
+  } else if (message.startsWith('/mycodes')) {
+    let userData = getUserData(userId);
+    if (userData.codes && userData.codes.length > 0) {
+      let response = '📜 คุณได้สร้างโค้ดดังต่อไปนี้:\n';
+      userData.codes.forEach((codeEntry, index) => {
+        response += `🔹 ${index + 1}. ${codeEntry.codeName} - สร้างเมื่อ ${codeEntry.creationDate}\n`;
+      });
+      return client.replyMessage(event.replyToken, { type: 'text', text: response });
+    } else {
+      return client.replyMessage(event.replyToken, { type: 'text', text: '❌ คุณยังไม่ได้สร้างโค้ดใดๆ' });
+    }
+  
+  } else if (message.startsWith('/givecredits')) {
+    if (adminIds.includes(userId)) {
+      const replyOptions = {
+        type: 'template',
+        altText: 'กรุณาเลือกตัวเลือก',
+        template: {
+          type: 'buttons',
+          title: 'เพิ่มเครดิต',
+          text: 'กรุณาเลือกตัวเลือก:',
+          actions: [
+            { type: 'postback', label: 'เพิ่มให้ผู้ใช้', data: 'givecredits_to_user' },
+            { type: 'postback', label: 'เพิ่มให้ตัวเอง', data: 'givecredits_to_self' }
+          ]
+        }
+      };
+      return client.replyMessage(event.replyToken, replyOptions);
+    } else {
+      return client.replyMessage(event.replyToken, { type: 'text', text: '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น' });
+    }
+  
+  } else if (message.startsWith('/allcodes')) {
+    if (adminIds.includes(userId)) {
+      let response = '📄 รายการโค้ดทั้งหมด:\n';
+      for (let uid in usersData) {
+        if (usersData[uid].codes && usersData[uid].codes.length > 0) {
+          response += `👤 ผู้ใช้ ${uid}:\n`;
+          usersData[uid].codes.forEach((codeEntry, index) => {
+            response += ` - ${codeEntry.codeName}: ${codeEntry.code}\n`;
+          });
+        }
+      }
+      return client.replyMessage(event.replyToken, { type: 'text', text: response });
+    } else {
+      return client.replyMessage(event.replyToken, { type: 'text', text: '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น' });
+    }
+  
+  } else if (message.startsWith('/addclient')) {
+    // ฟังก์ชันในการเพิ่มลูกค้าใหม่ผ่าน Line
+    // คุณสามารถใช้ Flex Message หรือ Template Message เพื่อสร้าง UI แบบปุ่มได้
+    const replyOptions = {
+      type: 'template',
+      altText: 'กรุณาเลือกโปรไฟล์ที่ต้องการ',
+      template: {
+        type: 'buttons',
+        title: 'เลือกโปรไฟล์',
+        text: 'กรุณาเลือกโปรไฟล์ที่ต้องการ:',
+        actions: [
+          { type: 'postback', label: '🚀 TRUE PRO เฟสบุค', data: 'true_pro_facebook' }
         ]
       }
     };
-    bot.sendMessage(chatId, '🔧 กรุณาเลือกตัวเลือก:', options);
-  } else {
-    bot.sendMessage(chatId, '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น');
-  }
-});
-
-// รับคำสั่ง /allcodes สำหรับแอดมิน
-bot.onText(/\/allcodes/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  if (adminIds.includes(userId)) {
-    let response = '📄 รายการโค้ดทั้งหมด:\n';
-    for (let uid in usersData) {
-      if (usersData[uid].codes && usersData[uid].codes.length > 0) {
-        response += `👤 ผู้ใช้ ${uid}:\n`;
-        usersData[uid].codes.forEach((codeEntry, index) => {
-          response += ` - ${codeEntry.codeName}: ${codeEntry.code}\n`;
-        });
-      }
-    }
-    bot.sendMessage(chatId, response);
-  } else {
-    bot.sendMessage(chatId, '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น');
-  }
-});
-
-// รับคำสั่ง /addclient
-bot.onText(/\/addclient/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-
-  // ตรวจสอบว่าเป็นกลุ่มที่กำหนดหรือไม่
-  if (chatId === -1002344075247) {
-    // ส่งปุ่ม 'TRUE PRO เฟสบุค'
-    const options = {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🚀 TRUE PRO เฟสบุค', callback_data: 'true_pro_facebook' }]
-        ]
-      }
-    };
-    bot.sendMessage(chatId, '🔍 กรุณาเลือกโปรไฟล์ที่ต้องการ:', options);
-  } else {
-    bot.sendMessage(chatId, '⚠️ คำสั่งนี้สามารถใช้ได้เฉพาะในกลุ่มที่กำหนดเท่านั้น');
-  }
-});
-
-// จัดการการกดปุ่ม
-bot.on('callback_query', (callbackQuery) => {
-  const chatId = callbackQuery.message.chat.id;
-  const userId = callbackQuery.from.id;
-  const data = callbackQuery.data;
-
-  if (data === 'true_pro_facebook') {
-    // เริ่มต้นการสนทนาเพื่อเก็บข้อมูล
-    userSessions[userId] = { step: 'ask_code_name' };
-
-    bot.sendMessage(chatId, '📝 กรุณาตั้งชื่อโค้ดของคุณ');
-  } else if (data === 'givecredits_to_user') {
-    if (adminIds.includes(userId)) {
-      userSessions[userId] = { step: 'givecredits_ask_user' };
-      bot.sendMessage(chatId, '🔍 กรุณาตอบกลับข้อความของผู้ใช้ที่ต้องการเพิ่มเครดิตให้');
+    userSessions[userId] = { step: 'ask_code_name', chatId: userId };
+    return client.replyMessage(event.replyToken, replyOptions);
+  
+  } else if (message.includes('https://gift.truemoney.com/campaign/?v=')) {
+    // จัดการลิงก์ซองอั่งเปา
+    const codeMatch = message.match(/v=([a-zA-Z0-9]+)/);
+    if (codeMatch && codeMatch[1]) {
+      const code = codeMatch[1];
+      processTrueMoneyGiftCode(userId, code);
     } else {
-      bot.answerCallbackQuery(callbackQuery.id, '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น');
+      return client.replyMessage(event.replyToken, { type: 'text', text: '⚠️ ลิงก์ไม่ถูกต้อง โปรดส่งลิงก์ซองอั่งเปาวอเลทที่ถูกต้อง' });
     }
-  } else if (data === 'givecredits_to_self') {
-    if (adminIds.includes(userId)) {
-      userSessions[userId] = { step: 'givecredits_ask_amount', targetUserId: userId };
-      bot.sendMessage(chatId, '💰 กรุณาระบุจำนวนเครดิตที่ต้องการเพิ่มให้ตัวเอง');
-    } else {
-      bot.answerCallbackQuery(callbackQuery.id, '🚫 คำสั่งนี้สำหรับแอดมินเท่านั้น');
+  
+  } else {
+    // จัดการข้อความอื่นๆ
+    if (message && !message.startsWith('/')) {
+      return client.replyMessage(event.replyToken, { type: 'text', text: '❓ ไม่เข้าใจคำสั่งของคุณ โปรดใช้คำสั่งที่กำหนด' });
     }
   }
-});
 
-// จัดการข้อความจากผู้ใช้
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const text = msg.text;
-
-  // หากผู้ใช้อยู่ในสถานะการสนทนา
+  // จัดการกระบวนการสนทนาเพิ่มเติมตาม userSessions
   if (userSessions[userId]) {
     const session = userSessions[userId];
 
-    // เก็บ message IDs
-    if (!session.messageIds) {
-      session.messageIds = [];
-    }
-    session.messageIds.push(msg.message_id);
-
     if (session.step === 'ask_code_name') {
       // เก็บชื่อโค้ด
-      session.codeName = text;
+      session.codeName = message;
       session.step = 'ask_days';
-      bot.sendMessage(chatId, '📅 กรุณาเลือกจำนวนวันที่ต้องการ (1-30 วัน)');
+      return client.replyMessage(event.replyToken, { type: 'text', text: '📅 กรุณาเลือกจำนวนวันที่ต้องการ (1-30 วัน)' });
+    
     } else if (session.step === 'ask_days') {
-      const days = parseInt(text);
+      const days = parseInt(message);
       if (isNaN(days) || days <= 0 || days > 30) {
-        bot.sendMessage(chatId, '⚠️ กรุณาระบุจำนวนวันที่ถูกต้อง (1-30 วัน)');
+        return client.replyMessage(event.replyToken, { type: 'text', text: '⚠️ กรุณาระบุจำนวนวันที่ถูกต้อง (1-30 วัน)' });
       } else {
         session.days = days;
         session.step = 'ask_gb_limit';
-        bot.sendMessage(chatId, '💾 กรุณาระบุ GB ที่ต้องการจำกัด (หากไม่จำกัดพิมพ์ 0)');
+        return client.replyMessage(event.replyToken, { type: 'text', text: '💾 กรุณาระบุ GB ที่ต้องการจำกัด (หากไม่จำกัดพิมพ์ 0)' });
       }
+    
     } else if (session.step === 'ask_gb_limit') {
-      const gbLimit = parseInt(text);
+      const gbLimit = parseInt(message);
       if (isNaN(gbLimit) || gbLimit < 0) {
-        bot.sendMessage(chatId, '⚠️ กรุณาระบุจำนวน GB ที่ถูกต้อง');
+        return client.replyMessage(event.replyToken, { type: 'text', text: '⚠️ กรุณาระบุจำนวน GB ที่ถูกต้อง' });
       } else {
         session.gbLimit = gbLimit;
         session.step = 'creating_code';
-        bot.sendMessage(chatId, '⏳ กำลังสร้างโค้ดของคุณ โปรดรอสักครู่...');
-
-        // ส่ง GIF
-        const gifUrl = "https://i.imgur.com/DnLmp0s.gif";
-        bot.sendAnimation(chatId, gifUrl);
+        
+        // ส่งข้อความแอนิเมชัน (Line ไม่รองรับแอนิเมชันเช่น Telegram, ใช้ข้อความแทน)
+        client.replyMessage(event.replyToken, { type: 'text', text: '⏳ กำลังสร้างโค้ดของคุณ โปรดรอสักครู่...' });
 
         // สร้างโค้ดหลังจาก 4 วินาที
         setTimeout(() => {
-          const userIdStr = userId.toString();
-          let userData = getUserData(userIdStr);
+          let userData = getUserData(userId);
           let currentCredits = userData.credits || 0;
-
           const requiredCredits = session.days;
 
           if (currentCredits >= requiredCredits) {
             // หักเครดิตและเพิ่มลูกค้าใหม่
             const newCredits = currentCredits - requiredCredits;
-
             userData.credits = newCredits;
-            saveUserData(userIdStr, userData);
+            saveUserData(userId, userData);
 
-            // ทำการเพิ่มลูกค้าใหม่
+            // ทำการเข้าสู่ระบบและเพิ่มลูกค้าใหม่
             login(() => {
               addNewClient(session, (clientCode) => {
-                // ส่งโค้ดไปยังแชทส่วนตัวของผู้ใช้
-                sendCodeToUser(userId, chatId, clientCode, session, msg);
-                // delete userSessions[userId]; // Will be deleted in sendCodeToUser
+                // ส่งโค้ดไปยังผู้ใช้
+                client.pushMessage(userId, { type: 'text', text: `✅ *โค้ดของคุณถูกสร้างสำเร็จ!*\n\n📬 กรุณาตรวจสอบโค้ดของคุณด้านล่าง:\n\n\`${clientCode}\``, emojis: [] });
+                
+                // อัปเดตข้อมูลผู้ใช้
+                if (!userData.codes) {
+                  userData.codes = [];
+                }
+                userData.codes.push({
+                  code: clientCode,
+                  codeName: session.codeName,
+                  creationDate: new Date().toLocaleString()
+                });
+                saveUserData(userId, userData);
+
+                client.pushMessage(userId, { type: 'text', text: '✅ โค้ดของคุณถูกสร้างและส่งเรียบร้อยแล้ว! โปรดตรวจสอบข้อความนี้ 📬' });
+
+                delete userSessions[userId];
               }, (errorMsg) => {
-                bot.sendMessage(chatId, '🚫 เกิดข้อผิดพลาดในการสร้างโค้ด: ' + errorMsg);
+                client.replyMessage(event.replyToken, { type: 'text', text: `🚫 เกิดข้อผิดพลาดในการสร้างโค้ด: ${errorMsg}` });
                 delete userSessions[userId];
               });
             });
           } else {
-            bot.sendMessage(chatId, `⚠️ เครดิตของคุณไม่เพียงพอ คุณมี ${currentCredits} เครดิต แต่ต้องการ ${requiredCredits} เครดิต\nโปรดเติมเครดิตโดยใช้คำสั่ง /topup`);
+            client.replyMessage(event.replyToken, { type: 'text', text: `⚠️ เครดิตของคุณไม่เพียงพอ คุณมี ${currentCredits} เครดิต แต่ต้องการ ${requiredCredits} เครดิต\nโปรดเติมเครดิตโดยใช้คำสั่ง /topup` });
             delete userSessions[userId];
           }
         }, 4000); // รอ 4 วินาทีเพื่อจำลองเวลาประมวลผล
       }
     } else if (session.step === 'givecredits_ask_user') {
-      if (msg.reply_to_message && msg.reply_to_message.from) {
-        const targetUserId = msg.reply_to_message.from.id;
-        session.targetUserId = targetUserId;
-        session.step = 'givecredits_ask_amount';
-        bot.sendMessage(chatId, '💰 กรุณาระบุจำนวนเครดิตที่ต้องการเพิ่มให้ผู้ใช้');
-      } else {
-        bot.sendMessage(chatId, '⚠️ กรุณาตอบกลับข้อความของผู้ใช้ที่ต้องการเพิ่มเครดิตให้');
-      }
+      // จัดการการให้เครดิตให้ผู้ใช้
+      // เนื่องจาก Line ไม่รองรับการตอบกลับเช่น Telegram คุณอาจต้องใช้วิธีอื่น เช่น การระบุ User ID
+      return client.replyMessage(event.replyToken, { type: 'text', text: '🔍 กรุณาระบุ User ID ของผู้ใช้ที่ต้องการเพิ่มเครดิตให้' });
+    
     } else if (session.step === 'givecredits_ask_amount') {
-      const amount = parseInt(text);
+      const amount = parseInt(message);
       if (isNaN(amount) || amount <= 0) {
-        bot.sendMessage(chatId, '⚠️ กรุณาระบุจำนวนเครดิตที่ถูกต้อง');
+        return client.replyMessage(event.replyToken, { type: 'text', text: '⚠️ กรุณาระบุจำนวนเครดิตที่ถูกต้อง' });
       } else {
         const targetUserId = session.targetUserId.toString();
         let targetUserData = getUserData(targetUserId);
@@ -457,85 +443,60 @@ bot.on('message', (msg) => {
         targetUserData.credits = currentCredits + amount;
         saveUserData(targetUserId, targetUserData);
 
-        bot.sendMessage(chatId, `✅ เพิ่มเครดิตให้กับผู้ใช้ ${targetUserId} จำนวน ${amount} เครดิตแล้ว`);
+        client.replyMessage(event.replyToken, { type: 'text', text: `✅ เพิ่มเครดิตให้กับผู้ใช้ ${targetUserId} จำนวน ${amount} เครดิตแล้ว` });
 
         if (targetUserId !== userId.toString()) {
-          // Notify target user in private chat
-          bot.sendMessage(targetUserId, `💰 คุณได้รับเครดิตเพิ่ม ${amount} เครดิต จากแอดมิน`);
+          // แจ้งเตือนผู้ใช้เป้าหมายในแชทส่วนตัว
+          client.pushMessage(targetUserId, { type: 'text', text: `💰 คุณได้รับเครดิตเพิ่ม ${amount} เครดิต จากแอดมิน` })
+            .catch((error) => {
+              console.error('Error notifying target user:', error);
+            });
         }
         delete userSessions[userId];
       }
     }
-  } else if (msg.chat.type === 'private') {
-    // จัดการข้อความในแชทส่วนตัว
-
-    // จัดการลิงก์ซองอั่งเปา
-    if (text && text.includes('https://gift.truemoney.com/campaign/?v=')) {
-      // ตรวจสอบว่ามีลิงก์ซองอั่งเปาหรือไม่
-      const codeMatch = text.match(/v=([a-zA-Z0-9]+)/);
-      if (codeMatch && codeMatch[1]) {
-        const code = codeMatch[1];
-
-        // ทำการเรียก API เพื่อรับเงิน
-        processTrueMoneyGiftCode(chatId, code);
-      } else {
-        bot.sendMessage(chatId, '⚠️ ลิงก์ไม่ถูกต้อง โปรดส่งลิงก์ซองอั่งเปาวอเลทที่ถูกต้อง');
-      }
-    }
-  } else {
-    // ไม่ตอบสนองต่อข้อความอื่นๆ ในกลุ่ม
-    if (text && !text.startsWith('/')) {
-      bot.sendMessage(chatId, '❓ ไม่เข้าใจคำสั่งของคุณ โปรดใช้คำสั่งที่กำหนด');
-    }
   }
-});
+}
 
 // ฟังก์ชันสำหรับส่งโค้ดไปยังผู้ใช้
-function sendCodeToUser(userId, chatId, clientCode, session, msg) {
+function sendCodeToUser(userId, clientCode, session) {
   // ส่งโค้ดไปยังแชทส่วนตัวของผู้ใช้
-  bot.sendMessage(userId, `✅ โค้ดของคุณถูกสร้างสำเร็จ!\n\n📬 กรุณาตรวจสอบโค้ดของคุณด้านล่าง:\n\n${clientCode}`)
-    .then(() => {
-      // หลังจากส่งโค้ดสำเร็จ อัปเดตข้อมูลผู้ใช้
-      const userIdStr = userId.toString();
-      let userData = getUserData(userIdStr);
-      if (!userData.codes) {
-        userData.codes = [];
-      }
-      userData.codes.push({
-        code: clientCode,
-        codeName: session.codeName,
-        creationDate: new Date().toLocaleString()
-      });
-      saveUserData(userIdStr, userData);
-
-      // แจ้งเตือนในกลุ่ม
-      bot.sendMessage(chatId, '✅ โค้ดของคุณถูกส่งไปยังแชทส่วนตัวแล้ว! โปรดตรวจสอบแชทส่วนตัวของคุณ 📬');
-
-      // ลบข้อความในการสนทนา
-      if (session && session.messageIds) {
-        session.messageIds.forEach((messageId) => {
-          bot.deleteMessage(chatId, messageId).catch((error) => {
-            console.error('Error deleting message:', error);
-          });
-        });
-      }
-      delete userSessions[userId];
-    })
-    .catch((error) => {
-      if (error.response && error.response.statusCode === 403) {
-        // ผู้ใช้ยังไม่ได้เริ่มแชทกับบอท
-        const options = {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'เริ่มแชทกับบอท', url: `https://t.me/${botUsername}?start` }]
-            ]
-          }
-        };
-        const username = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
-        // ส่งข้อความในกลุ่ม
-        bot.sendMessage(chatId, `${username} กรุณากดปุ่มด้านล่างเพื่อเริ่มแชทส่วนตัวกับบอท`, options);
-      } else {
-        console.error('Error sending code to user:', error);
-      }
+  client.pushMessage(userId, {
+    type: 'text',
+    text: `✅ *โค้ดของคุณถูกสร้างสำเร็จ!*\n\n📬 กรุณาตรวจสอบโค้ดของคุณด้านล่าง:\n\n\`${clientCode}\``,
+    emojis: []
+  })
+  .then(() => {
+    // หลังจากส่งโค้ดสำเร็จ อัปเดตข้อมูลผู้ใช้
+    const userIdStr = userId.toString();
+    let userData = getUserData(userIdStr);
+    if (!userData.codes) {
+      userData.codes = [];
+    }
+    userData.codes.push({
+      code: clientCode,
+      codeName: session.codeName,
+      creationDate: new Date().toLocaleString()
     });
+    saveUserData(userIdStr, userData);
+  })
+  .catch((error) => {
+    if (error.statusCode === 403) {
+      // ผู้ใช้ยังไม่ได้เริ่มแชทกับบอท
+      const replyOptions = {
+        type: 'template',
+        altText: 'เริ่มแชทกับบอท',
+        template: {
+          type: 'buttons',
+          text: 'กรุณากดปุ่มด้านล่างเพื่อเริ่มแชทส่วนตัวกับบอท',
+          actions: [
+            { type: 'uri', label: 'เริ่มแชทกับบอท', uri: `https://line.me/R/ti/p/${config.channelAccessToken}` }
+          ]
+        }
+      };
+      client.pushMessage(userId, replyOptions);
+    } else {
+      console.error('Error sending code to user:', error);
+    }
+  });
 }
