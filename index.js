@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 
 // ใส่โทเคนบอท Telegram ของคุณที่นี่
-const token = '7762209808:AAG1ziCcQt5vrT7IqA1VsKVFWkHiVbEov68'; // แทนที่ด้วยโทเคนของคุณ
+const token = ''; // แทนที่ด้วยโทเคนของคุณ
 
 // สร้างบอทที่ใช้ 'polling' ในการรับข้อความใหม่
 const bot = new TelegramBot(token, { polling: true });
@@ -38,13 +38,13 @@ function generateExpiryTime(days) {
 function login(callback) {
   const loginOptions = {
     method: 'POST',
-    url: 'http://www.opensignal.com.esnfvpnfreevip_bot.itow.online:2053/GaKtR4zXrqhyIpG/login',
+    url: '/GaKtR4zXrqhyIpG/login',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     form: {
-      'username': '01AlTQySvR',
-      'password': 'QG77bUywmS'
+      'username': '',
+      'password': ''
     }
   };
 
@@ -76,7 +76,7 @@ function addNewClient(session, successCallback, errorCallback) {
 
   const options = {
     method: 'POST',
-    url: 'http://www.opensignal.com.esnfvpnfreevip_bot.itow.online:2053/GaKtR4zXrqhyIpG/panel/api/inbounds/addClient',
+    url: '/GaKtR4zXrqhyIpG/panel/api/inbounds/addClient',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json'
